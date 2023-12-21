@@ -8,6 +8,7 @@ from transfer import transfer_file_via_ssh,set_network_conditions,reset_network_
 import lz4.frame
 import gzip
 import zstandard as zstd
+import subprocess
 def calculate_cost(
         compression_time: float,
         compression_ratio: float,
@@ -93,11 +94,13 @@ def transfer_process(worker_id, transfer_input_queue,output_queue,compression_al
 
                 start_transfer_time = time.time()
                 for filename in os.listdir(save_folder):#loop throgh all columns files saved in folder
-                    file_path = os.path.join(output_path, filename)
+                    file_path = os.path.join(save_folder, filename)
                     if (f'worker_{worker_id}' in filename):
-                        print(f'transfer_{worker_id} is sending last pice\n')
-                        transfer_file_via_ssh(local_file_path=1, remote_username=1, remote_host=1, remote_file_path=1)#transfer it
-                        print(f'transfer_{worker_id} done sending last pice\n')
+                        #print(f'transfer_{worker_id} is sending last pice\n')
+                        #transfer_file_via_ssh(local_file_path=output_path, remote_username=remote_username, remote_host=remote_host, remote_file_path=remote_file_path)#transfer it
+                        cmd = ["scp", file_path, f"{remote_username}@{remote_host}:{remote_file_path}"]
+                        subprocess.run(cmd)
+                        #print(f'transfer_{worker_id} done sending last pice\n')
                 end_transfer_time = time.time()
                 process_transfer_time += end_transfer_time - start_transfer_time
                 output_queue.put((None,total_compress_time,process_transfer_time))#transfer is finished
@@ -240,7 +243,7 @@ def expierment(file_name,original_data_size,train_percent,model_name,chunk_size,
     compress_process = Process(target=compress_module, args=(compress_queue, transfer_queue,algorithm,compress_save_path,worker_num,target_user,targe_tip,target_path))
     classify_process.start()#start listening for data stream for classification
     compress_process.start()#start listening labeled chunks for compression and transfer
-    set_network_conditions("eth0", f'{network_speed}mbit', "0ms", "0%")#set the network speed
+    set_network_conditions("ens33", f'{network_speed}mbit', "0ms", "0%")#set the network speed
     print("loading data stream")
     for  i,chunk in enumerate(pd.read_csv(f'{"data/original"}/{file_name}.csv', chunksize=chunk_size, delimiter='|')):
         classify_queue.put(chunk)
@@ -279,11 +282,11 @@ def main():
     model_path = 'models'
     model_name = 'AdaBoost'
     alg = 'gzip'
-    networkspeed = 5
+    networkspeed = 100
     chunk_size = 10000
     compress_save_path = f'data/compressed_data/{train_percent}%_train/{model_name}_{file_name}'
     target_path = '/home/sean/Desktop/'
-    expierment(file_name,original_data_size,train_percent=20,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=1,target_user=1,network_speed=1,compress_save_path=compress_save_path,target_path=target_path)
+    expierment(file_name,original_data_size,train_percent=20,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip='192.168.204.128',target_user='sean',network_speed=100,compress_save_path=compress_save_path,target_path=target_path)
     return
 
 if __name__ == "__main__":
