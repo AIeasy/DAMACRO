@@ -234,18 +234,18 @@ def compress_module(input_queue, output_queue,alg,path,num_worker, remote_userna
     output_queue.put((compress_time, total_transfer_time,classify_time,None))
     print("out compress model")
     return
-def expierment(file_name,original_data_size,train_percent,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path):
+def expierment(file_path,file_name,original_data_size,train_percent,model_path,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path):
     classify_queue = Queue()
     compress_queue = Queue()
     transfer_queue = Queue()
-    model = joblib.load(f'{"models"}/{train_percent}%_train/{model_name}_{file_name}.joblib')
+    model = joblib.load(f'{model_path}/{train_percent}%_train/{model_name}_{file_name}.joblib')
     classify_process = Process(target=classify_module, args=(classify_queue, compress_queue,model))
     compress_process = Process(target=compress_module, args=(compress_queue, transfer_queue,algorithm,compress_save_path,worker_num,target_user,targe_tip,target_path))
     classify_process.start()#start listening for data stream for classification
     compress_process.start()#start listening labeled chunks for compression and transfer
     set_network_conditions("ens33", f'{network_speed}mbit', "0ms", "0%")#set the network speed
     print("loading data stream")
-    for  i,chunk in enumerate(pd.read_csv(f'{"data/original"}/{file_name}.csv', chunksize=chunk_size, delimiter='|')):
+    for  i,chunk in enumerate(pd.read_csv(f'{file_path}/{file_name}.csv', chunksize=chunk_size, delimiter='|')):
         classify_queue.put(chunk)
     print("stream loaded")
     classify_queue.put(None)  # End of data stream signal
@@ -286,7 +286,7 @@ def main():
     chunk_size = 10000
     compress_save_path = f'data/compressed_data/{train_percent}%_train/{model_name}_{file_name}'
     target_path = '/home/sean/Desktop/'
-    expierment(file_name,original_data_size,train_percent=20,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip='192.168.204.128',target_user='sean',network_speed=100,compress_save_path=compress_save_path,target_path=target_path)
+    expierment(file_path,file_name,original_data_size,train_percent=20,model_path,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip='192.168.204.128',target_user='sean',network_speed=100,compress_save_path=compress_save_path,target_path=target_path)
     return
 
 if __name__ == "__main__":
