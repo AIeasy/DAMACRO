@@ -1,6 +1,6 @@
 from multiprocessing import Process, Queue, Event
 import time
-from classify import classify_chunk
+from classify import classify_chunk,classify_chunk_fd
 import joblib
 import pandas as pd
 import os
@@ -9,6 +9,15 @@ import lz4.frame
 import gzip
 import zstandard as zstd
 import subprocess
+import json
+def get_fdlist(json_path):
+    with open(json_path, 'r') as file:
+        config = json.load(file)
+    fd_list = config["Selected_Three_node_split"]
+
+
+    return fd_list
+
 def calculate_cost(
         compression_time: float,
         compression_ratio: float,
@@ -44,6 +53,36 @@ def calculate_throughput(
     return throughput
 def compress(data, compression_algorithm):
     # Drop the label column and other pre-processing
+    data = data.drop(columns=['label'])
+    start_time = time.time()
+    compressed_columns = {}
+    i=0
+    for column in data.columns:
+        
+    # Compress data based on the specified algorithm
+        column_data = data[column].tolist()
+        column_data.insert(0,column)
+        column_data = pd.DataFrame(column_data)
+        if compression_algorithm == 'lz4':
+            compressed_data = lz4.frame.compress(column_data.to_csv(index=False).encode())
+            compressed_columns[column] = compressed_data
+        elif compression_algorithm == 'gzip':
+            compressed_data = gzip.compress(column_data.to_csv(index=False).encode())
+            compressed_columns[i] = compressed_data
+        elif compression_algorithm == 'zstd':
+            cctx = zstd.ZstdCompressor(level=3)
+            compressed_data = cctx.compress(column_data.to_csv(index=False).encode())
+            compressed_columns[column] = compressed_data
+        else:
+            raise ValueError(f"Unsupported compression algorithm: {compression_algorithm}")
+        i+=1
+    end_time = time.time()
+    compress_time = end_time - start_time
+
+    return compressed_columns, compress_time
+def compress_fd(data, compression_algorithm,fd_list):
+    # Drop the label column and other pre-processing
+    data = data.sort_values(by=fd_list)
     data = data.drop(columns=['label'])
     start_time = time.time()
     compressed_columns = {}
@@ -145,6 +184,30 @@ def worker_process(worker_id, input_queue, output_queue,alg,path):
             total_compress_time += compress_time
             output_queue.put((worker_id, total_compress_time,compressed_data))#feed the compressed_dic into transfer
             accumulated_data = pd.DataFrame()
+def worker_process_fd(worker_id, input_queue, output_queue,alg,fd_list):
+    print(f'worker_{worker_id}_start\n')
+    total_compress_time = 0
+    accumulated_data = pd.DataFrame()
+    while True:
+        data = input_queue.get()
+        if data is None:  # Shutdown signal
+            if not accumulated_data.empty:
+                compressed_data,compress_time = compress_fd(accumulated_data,alg,fd_list)#get leftover compressed_dic
+                total_compress_time += compress_time
+                output_queue.put((None,worker_id, total_compress_time,compressed_data))#feed the leftover compressed_dic into transfer and tell transfer to stop
+                print(f'worker_{worker_id}_end_l\n')
+                break
+            output_queue.put((None,worker_id, total_compress_time,""))#feed the leftover compressed_dic into transfer and tell transfer to stop
+            print(f'worker_{worker_id}_end\n')
+            break
+        
+        accumulated_data = pd.concat([accumulated_data, data])
+        if len(accumulated_data) >= 10000:
+
+            compressed_data,compress_time = compress(accumulated_data,alg)#get compressed_dic
+            total_compress_time += compress_time
+            output_queue.put((worker_id, total_compress_time,compressed_data))#feed the compressed_dic into transfer
+            accumulated_data = pd.DataFrame()
 def classify_module(input_queue, output_queue,model):
     start_time = time.time()
     while True:
@@ -155,6 +218,20 @@ def classify_module(input_queue, output_queue,model):
             output_queue.put((None,end_time-start_time))
             break
         labeled_data = classify_chunk(chunk,model)
+
+        output_queue.put(labeled_data)
+    print("classify module is done")
+    return
+def classify_module_fd(input_queue, output_queue,model,json_path):
+    start_time = time.time()
+    while True:
+        chunk = input_queue.get()
+        if chunk is None:
+            end_time = time.time()
+            print(f"Classification Time: {end_time-start_time}")
+            output_queue.put((None,end_time-start_time))
+            break
+        labeled_data = classify_chunk_fd(chunk,model,json_path)
 
         output_queue.put(labeled_data)
     print("classify module is done")
@@ -205,7 +282,52 @@ def compress_module(input_queue, output_queue,alg,path,num_worker, remote_userna
     output_queue.put((compress_time, total_transfer_time,classify_time,None))
     print("out compress model")
     return
+def compress_module_fd(input_queue, output_queue,alg,path,num_worker, remote_username, remote_host, remote_file_path,fd_list):
+    print("in the compress module")
 
+    worker_queues = {label: Queue() for label in range(num_worker)}  # for number of worker, create worker queues
+    transfer_queues = {label: Queue() for label in range(num_worker)}#for number of worker, create transfer queues
+    workers = [Process(target=worker_process_fd, args=(label, worker_queues[label], transfer_queues[label],alg,fd_list)) for label in range(num_worker)]#create worker process
+    transfers = [Process(target=transfer_process, args=(label, transfer_queues[label],output_queue,alg,path, remote_username, remote_host, remote_file_path)) for label in range(num_worker)] #create transfer process
+
+    for worker in workers:#starting worker listening for labeled chunk
+        worker.start()
+    for transfer in transfers:#start transfer listening for compressed_dic which cotains columns
+        transfer.start()
+    while True:
+        labeled_chunk = input_queue.get()#get the lableed chunk
+
+        if len(labeled_chunk) == 2:  # Shutdown signal
+            _,classify_time = labeled_chunk
+            print("time to stop")
+            for q in worker_queues.values():        
+                q.put(None)#stop worker
+            break
+
+        # Split the labeled_chunk DataFrame into clusters based on labels
+        for label in range(num_worker):
+            cluster_data =labeled_chunk.loc[labeled_chunk['label'] == label]
+            worker_queues[label].put(cluster_data)
+
+    total_transfer_time =0
+    start_time_c = time.time()#timing for compression time
+    for worker in workers:#wait worker finish it jobs
+        worker.join()
+    end_time_c = time.time()
+    print("Worker is done:D")
+    start_time_t = time.time()#timing for transfer time
+    for transfer in transfers:#wait transfer finish it jobs
+        transfer.join()
+    end_time_t = time.time()
+    print("Trasfer is done :D")
+
+    compress_time = end_time_c-start_time_c
+    total_transfer_time = end_time_t-start_time_t
+    print(f"Total Compression Time: {compress_time}")
+    print(f"Total Tramsfer Time: {total_transfer_time}")
+    output_queue.put((compress_time, total_transfer_time,classify_time,None))
+    print("out compress model")
+    return
 # random split
 def base_line(file_name,original_data_size,train_percent,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path):
     classify_queue = Queue()
@@ -284,7 +406,51 @@ def expierment(file_path,file_name,original_data_size,model_path,train_percent,m
     print("OUT: Cost: {:.4f}".format(cost))
     reset_network_conditions('eth0')
     return
+def expierment_fd(json_path,file_path,file_name,original_data_size,model_path,train_percent,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path,num_cores):
+    fd_list = get_fdlist(json_path)
+    classify_queue = Queue()
+    compress_queue = Queue()
+    transfer_queue = Queue()
+    model = joblib.load(f'{model_path}/{train_percent}%_train/{model_name}_{file_name}.joblib')
+    classify_process = Process(target=classify_module_fd, args=(classify_queue, compress_queue,model,json_path))
+    compress_process = Process(target=compress_module_fd, args=(compress_queue, transfer_queue,algorithm,compress_save_path,worker_num,target_user,targe_tip,target_path,fd_list))
+    classify_process.start()#start listening for data stream for classification
+    compress_process.start()#start listening labeled chunks for compression and transfer
+    set_network_conditions("ens33", f'{network_speed}mbit', "0ms", "0%")#set the network speed
 
+    print("loading data stream")
+    for  i,chunk in enumerate(pd.read_csv(f'{file_path}/{file_name}.csv', chunksize=chunk_size, delimiter=',')):
+        classify_queue.put(chunk)
+    print("stream loaded")
+    classify_queue.put(None)  # End of data stream signal
+    print("classify start")
+    classify_process.join() #wait the calssification module finish its jobs
+    print("classify finish")
+    print("compress start")
+    compress_process.join() #wait the compression module finish its jobs
+    print("compress done")
+
+    i=0
+    while transfer_queue.empty() != True:#load the outputs
+        check = transfer_queue.get()
+        print("i=", i)
+        i += 1
+        if type(check) != None and len(check)==4:
+            
+            total_compress_time,total_transfer_time,classify_time,_ = check
+    print("OUT: Compressiontime: {:.4f}".format(total_compress_time))
+    print("OUT: TransferTime: {:.4f}".format(total_transfer_time))
+    print("OUT: Classification time: {:.4f}".format(classify_time))
+    compressed_size = get_folder_size(os.path.join(compress_save_path, algorithm))
+    print("OUT: Compressed size: {:.4f}".format(compressed_size))
+    compression_ratio =  original_data_size / compressed_size
+    print("OUT: Compression ratio: {:.4f}".format(compression_ratio))
+    throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=5,data_size=original_data_size)
+    print("OUT: Throughput: {:.4f}".format(throughput))
+    cost = calculate_cost(compression_ratio=compression_ratio,original_size=original_data_size,num_cores=num_cores,compression_time=total_compress_time)
+    print("OUT: Cost: {:.4f}".format(cost))
+    reset_network_conditions('eth0')
+    return
 def main():
     original_data_size=151.3
     file_path = '/home/yunfei/Project/data/original'
