@@ -406,13 +406,13 @@ def expierment(file_path,file_name,original_data_size,model_path,train_percent,m
     print("OUT: Cost: {:.4f}".format(cost))
     reset_network_conditions('eth0')
     return
-def expierment_fd(json_path,file_path,file_name,original_data_size,model_path,train_percent,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path,num_cores):
+def expierment_fd(scaler_path,json_path,file_path,file_name,original_data_size,model_path,train_percent,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path,num_cores):
     fd_list = get_fdlist(json_path)
     classify_queue = Queue()
     compress_queue = Queue()
     transfer_queue = Queue()
     model = joblib.load(f'{model_path}/{train_percent}%_train/{model_name}_{file_name}.joblib')
-    classify_process = Process(target=classify_module_fd, args=(classify_queue, compress_queue,model,json_path))
+    classify_process = Process(target=classify_module_fd, args=(classify_queue, compress_queue,model,json_path,scaler_path))
     compress_process = Process(target=compress_module_fd, args=(compress_queue, transfer_queue,algorithm,compress_save_path,worker_num,target_user,targe_tip,target_path,fd_list))
     classify_process.start()#start listening for data stream for classification
     compress_process.start()#start listening labeled chunks for compression and transfer
