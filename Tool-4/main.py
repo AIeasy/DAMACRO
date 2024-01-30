@@ -86,7 +86,6 @@ def compress_fd(data, compression_algorithm,fd_list):
     data = data.drop(columns=['label'])
     start_time = time.time()
     compressed_columns = {}
-    i=0
     for column in data.columns:
         
     # Compress data based on the specified algorithm
@@ -105,7 +104,6 @@ def compress_fd(data, compression_algorithm,fd_list):
             compressed_columns[column] = compressed_data
         else:
             raise ValueError(f"Unsupported compression algorithm: {compression_algorithm}")
-        i+=1
     end_time = time.time()
     compress_time = end_time - start_time
 
