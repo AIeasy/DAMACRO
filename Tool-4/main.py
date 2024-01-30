@@ -222,7 +222,7 @@ def classify_module(input_queue, output_queue,model):
         output_queue.put(labeled_data)
     print("classify module is done")
     return
-def classify_module_fd(input_queue, output_queue,model,json_path):
+def classify_module_fd(input_queue, output_queue,model,json_path,scaler_path):
     start_time = time.time()
     while True:
         chunk = input_queue.get()
@@ -231,8 +231,8 @@ def classify_module_fd(input_queue, output_queue,model,json_path):
             print(f"Classification Time: {end_time-start_time}")
             output_queue.put((None,end_time-start_time))
             break
-        labeled_data = classify_chunk_fd(chunk,model,json_path)
-
+        labeled_data = classify_chunk_fd(chunk,model,json_path,scaler_path)
+        #print(len(labeled_data))
         output_queue.put(labeled_data)
     print("classify module is done")
     return
