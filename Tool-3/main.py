@@ -1,6 +1,6 @@
 from multiprocessing import Process, Queue, Event
 import time
-from classify import classify_chunk
+from classify import classify_chunk,classify_chunk_base
 import joblib
 import pandas as pd
 import os
@@ -161,6 +161,20 @@ def classify_module(input_queue, output_queue,model):
         output_queue.put(labeled_data)
     print("classify module is done")
     return
+def classify_module_base(input_queue, output_queue):
+    i = 0 
+    while True:
+        if i >9:
+            i=0
+        chunk = input_queue.get()
+        if chunk is None:
+            output_queue.put((None,0))
+            break
+        labeled_data = classify_chunk_base(chunk,i)
+        output_queue.put(labeled_data)
+        i += 1
+    print("classify module is done")
+    return
 def compress_module(input_queue, output_queue,alg,path,num_worker, remote_username, remote_host, remote_file_path,network_speed):
     print("in the compress module")
 
@@ -209,19 +223,26 @@ def compress_module(input_queue, output_queue,alg,path,num_worker, remote_userna
     return
 
 # random split
-def base_line(file_name,original_data_size,train_percent,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path):
+def base_line(file_path,file_name,original_data_size,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path,num_cores):
+    result_folder = os.path.join('/home/yunfei/Tool-3/results', 'baseline')#create folder
+    result_folder = os.path.join(result_folder,f'{file_name}')
+    if not os.path.exists(result_folder):
+        os.makedirs(result_folder)
     classify_queue = Queue()
     compress_queue = Queue()
     transfer_queue = Queue()
-    compress_process = Process(target=compress_module, args=(compress_queue, transfer_queue,algorithm,compress_save_path,worker_num,target_user,targe_tip,target_path))
+    classify_process = Process(target=classify_module_base, args=(classify_queue, compress_queue))
+    compress_process = Process(target=compress_module, args=(compress_queue, transfer_queue,algorithm,compress_save_path,worker_num,target_user,targe_tip,target_path,network_speed))
+    classify_process.start()
     compress_process.start()#start listening labeled chunks for compression and transfer
-    #set_network_conditions("enp70s0", f'{network_speed}mbit', "0ms", "0%")#set the network speed
     print("loading data stream")
-    for  i,chunk in enumerate(pd.read_csv(f'{"data/original"}/{file_name}.csv', chunksize=chunk_size, delimiter='|')):
+    for  i,chunk in enumerate(pd.read_csv(f'{file_path}/{file_name}.csv', chunksize=chunk_size, delimiter='|')):
         classify_queue.put(chunk)
-
-    classify_queue.put(None, 0)
     print("stream loaded")
+    classify_queue.put(None)
+    print("classify start")
+    classify_process.join()
+    print("classify finish")
     print("compress start")
     compress_process.join() #wait the compression module finish its jobs
     print("compress done")
@@ -239,9 +260,19 @@ def base_line(file_name,original_data_size,train_percent,model_name,chunk_size,a
     print("OUT: Compression ratio: ", compression_ratio)
     throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=5,data_size=original_data_size)
     print("OUT: Throughput: ",throughput)
-    cost = calculate_cost(compression_ratio=compression_ratio,original_size=original_data_size,num_cores=24,compression_time=total_compress_time)
+    cost = calculate_cost(compression_ratio=compression_ratio,original_size=original_data_size,num_cores=num_cores,compression_time=total_compress_time)
     print("OUT: Cost: ",cost)
-    #reset_network_conditions('eth0')
+    with open(f'{result_folder}/result_{file_name}_Base_{algorithm}_{network_speed}.txt', "w") as result_file:
+        result_file.write(f"Compressiontime: {total_compress_time:.4f}\n")
+        result_file.write(f"TransferTime: {total_transfer_time:.4f}\n")
+        result_file.write(f"Classification time: {classify_time:.4f}\n")
+        result_file.write(f"Compressed size: {compressed_size:.4f}\n")
+        result_file.write(f"Compression ratio: {compression_ratio:.4f}\n")
+        result_file.write(f"Throughput: {throughput:.4f}\n")
+        result_file.write(f"Cost: {cost:.4f}\n")
+        result_file.write(f"NetworkSpeed: {network_speed:.4f}\n")
+        result_file.write(f"Original_size: {original_data_size:.4f}\n")
+        result_file.write(f"Model: Random_split\n")
     return
 def expierment( file_path,file_name,original_data_size,model_path,train_percent,model_name,chunk_size,algorithm,worker_num,targe_tip,target_user,network_speed,compress_save_path,target_path,num_cores):
     result_folder = os.path.join('/home/yunfei/Tool-3/results', f'{train_percent}%')#create folder
@@ -322,8 +353,8 @@ def main():
     target_user = 'zhongxin'
     expierment(file_path,file_name,original_data_size,model_path,train_percent=20,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeed,compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
 
-    '''
-    original_data_size=151.3
+  
+    original_data_size=170.5
     file_path = '/home/yunfei/Project/data/original'
     file_name = 'orders'
     train_percent = 20
@@ -334,7 +365,7 @@ def main():
     networkspeeds = [25,20,15,10,5,2]
     chunk_size = 10000
 
-    target_path = '/eecs/home/zhongxin/target'
+    target_path = '/local/data1/zhongxin/target'
 
     target_ip = 'brain.eecs.yorku.ca'
     target_user = 'zhongxin'
@@ -344,7 +375,23 @@ def main():
             networkspeed = networkspeeds[j]
             compress_save_path = f'/home/yunfei/Tool-3/data/compressed_data/{train_percent}%_train/{model_name}_{file_name}'
             expierment(file_path,file_name,original_data_size,model_path,train_percent=20,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeed,compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
+  '''
+    original_data_size=151.3
+    file_path = '/home/yunfei/Project/data/original'
+    file_name = 'econbiz'
+    train_percent = 'Random'
+    model_path = '/home/yunfei/Project/models'
+    model_name = 'Random_split'
+    alg = 'gzip'
+    num_cores = 48
+    networkspeed = 20
+    chunk_size = 10000
+    compress_save_path = f'/home/yunfei/Tool-3/data/compressed_data/{train_percent}%_train/{model_name}_{file_name}'
+    target_path = '/eecs/home/zhongxin/target'
 
+    target_ip = 'brain.eecs.yorku.ca'
+    target_user = 'zhongxin'
+    base_line(file_path,file_name,original_data_size,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeed,compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
     return
 
 if __name__ == "__main__":
