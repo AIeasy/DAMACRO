@@ -51,3 +51,7 @@ def classify_chunk_fd(chunk,model,json_path,scaler_path):
     predictions = classify_data(processed_data, model,scaler_path)
     chunk_with_labels = add_labels_to_chunk(chunk, predictions)
     return chunk_with_labels
+def classify_chunk_base(chunk,label):
+    labels = [label]* chunk.shape[0]
+    chunk_with_labels = add_labels_to_chunk(chunk,labels)
+    return chunk_with_labels
