@@ -28,7 +28,7 @@ def get_folder_size(folder_path):
         for filename in filenames:
             file_path = os.path.join(dirpath, filename)
             total_size += os.path.getsize(file_path)
-            os.remove(file_path)
+            #os.remove(file_path)
 
     return total_size / (1024 * 1024)
 def calculate_throughput(
@@ -40,7 +40,7 @@ def calculate_throughput(
 ):
     total_time = classification_time + compression_time
     class_throughput = data_size / total_time
-    netwrok_throughput = network_speed * compression_ratio
+    netwrok_throughput = network_speed 
     throughput = min(class_throughput, netwrok_throughput)
     return throughput
 def compress(data, compression_algorithm):
@@ -161,16 +161,17 @@ def classify_module(input_queue, output_queue,model):
         output_queue.put(labeled_data)
     print("classify module is done")
     return
-def classify_module_base(input_queue, output_queue):
+def classify_module_base(input_queue, output_queue): #一直监听
     i = 0 
-    while True:
+    while True:#一直运行直到chunk = none
         if i >9:
             i=0
-        chunk = input_queue.get()
-        if chunk is None:
+        chunk = input_queue.get()#拿出一个chunk
+        if chunk is None:#受到结束信号
             output_queue.put((None,0))
             break
-        labeled_data = classify_chunk_base(chunk,i)
+        labeled_data = classify_chunk_base(chunk,i)#传入一个chunk以及0-9  给我一个labeled chunk label = current i
+        print(f"current label:{i}")
         output_queue.put(labeled_data)
         i += 1
     print("classify module is done")
@@ -258,7 +259,9 @@ def base_line(file_path,file_name,original_data_size,chunk_size,algorithm,worker
     print("OUT: Compressed size: ",compressed_size)
     compression_ratio =  original_data_size / compressed_size
     print("OUT: Compression ratio: ", compression_ratio)
-    throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=5,data_size=original_data_size)
+    network_speed_fix = original_data_size/total_transfer_time
+    print("OUT: Network speed fix: ",network_speed_fix)
+    throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=network_speed_fix,data_size=original_data_size)
     print("OUT: Throughput: ",throughput)
     cost = calculate_cost(compression_ratio=compression_ratio,original_size=original_data_size,num_cores=num_cores,compression_time=total_compress_time)
     print("OUT: Cost: ",cost)
@@ -315,7 +318,8 @@ def expierment( file_path,file_name,original_data_size,model_path,train_percent,
     print("OUT: Compressed size: {:.4f}".format(compressed_size))
     compression_ratio =  original_data_size / compressed_size
     print("OUT: Compression ratio: {:.4f}".format(compression_ratio))
-    throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=5,data_size=original_data_size)
+    network_speed_fix = original_data_size/total_transfer_time
+    throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=network_speed_fix,data_size=original_data_size)
     print("OUT: Throughput: {:.4f}".format(throughput))
     cost = calculate_cost(compression_ratio=compression_ratio,original_size=original_data_size,num_cores=num_cores,compression_time=total_compress_time)
     print("OUT: Cost: {:.4f}".format(cost))
@@ -335,13 +339,14 @@ def expierment( file_path,file_name,original_data_size,model_path,train_percent,
     return
 
 def main():
+
     '''
-    original_data_size=151.3
+    original_data_size=118.2
     file_path = '/home/yunfei/Project/data/original'
-    file_name = 'econbiz'
+    file_name = 'partsupp'
     train_percent = 20
     model_path = '/home/yunfei/Project/models'
-    model_name = 'AdaBoost'
+    model_name = 'DecisionTree'
     alg = 'gzip'
     num_cores = 48
     networkspeed = 2
@@ -353,10 +358,12 @@ def main():
     target_user = 'zhongxin'
     expierment(file_path,file_name,original_data_size,model_path,train_percent=20,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeed,compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
 
-  
-    original_data_size=170.5
+    '''
+    
+
+    original_data_size=118.2
     file_path = '/home/yunfei/Project/data/original'
-    file_name = 'orders'
+    file_name = 'partsupp'
     train_percent = 20
     model_path = '/home/yunfei/Project/models'
     model_names = ['AdaBoost','DecisionTree','RandomForest','KNN','LogisticRegression','MLP']
@@ -369,30 +376,38 @@ def main():
 
     target_ip = 'brain.eecs.yorku.ca'
     target_user = 'zhongxin'
+    
+
     for i in range(len(model_names)):
         for j in range(len(networkspeeds)):
             model_name = model_names[i]
             networkspeed = networkspeeds[j]
             compress_save_path = f'/home/yunfei/Tool-3/data/compressed_data/{train_percent}%_train/{model_name}_{file_name}'
             expierment(file_path,file_name,original_data_size,model_path,train_percent=20,model_name=model_name,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeed,compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
-  '''
-    original_data_size=151.3
+
+
+    '''
+    original_data_size=118.2
     file_path = '/home/yunfei/Project/data/original'
-    file_name = 'econbiz'
+    file_name = 'partsupp'
     train_percent = 'Random'
     model_path = '/home/yunfei/Project/models'
     model_name = 'Random_split'
     alg = 'gzip'
     num_cores = 48
-    networkspeed = 20
+    networkspeeds = [25,20,15,10,5,2]
     chunk_size = 10000
     compress_save_path = f'/home/yunfei/Tool-3/data/compressed_data/{train_percent}%_train/{model_name}_{file_name}'
     target_path = '/eecs/home/zhongxin/target'
 
     target_ip = 'brain.eecs.yorku.ca'
     target_user = 'zhongxin'
-    base_line(file_path,file_name,original_data_size,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeed,compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
-    return
 
+    #for i in range(len(networkspeeds)):
+    #   base_line(file_path,file_name,original_data_size,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeeds[i],compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
+    #return   
+
+    #base_line(file_path,file_name,original_data_size,chunk_size=chunk_size,algorithm=alg,worker_num=10,targe_tip=target_ip,target_user=target_user,network_speed=networkspeeds[-1],compress_save_path=compress_save_path,target_path=target_path,num_cores=num_cores)
+    '''
 if __name__ == "__main__":
     main()
