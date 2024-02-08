@@ -14,16 +14,13 @@ def transfer_file_via_ssh(local_file_path, remote_username, remote_host, remote_
     duration = end_time - start_time
     return duration
     '''
-   time.sleep(3)
+#    time.sleep(3)
+   print('transfer_file_via_ssh')
    return 1
 def set_network_conditions(interface, rate, latency, loss):
-  
-    subprocess.call(["sudo", "tc", "qdisc", "del", "dev", interface, "root"])
-    
- 
-    subprocess.call(["sudo", "tc", "qdisc", "add", "dev", interface, "root", "netem", 
-                     "rate", rate, "delay", latency, "loss", loss])
-
+    #subprocess.call(["sudo", "tc", "qdisc", "del", "dev", interface, "root"])
+    #subprocess.call(["sudo", "tc", "qdisc", "add", "dev", interface, "root", "netem", "rate", rate, "delay", latency, "loss", loss])
+    return
 def reset_network_conditions(interface):
 
     cmd_check = ["tc", "-s", "qdisc", "show", "dev", interface]
