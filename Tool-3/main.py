@@ -38,10 +38,18 @@ def calculate_throughput(
         compression_ratio: float,
         network_speed: float,
 ):
-    total_time = classification_time + compression_time
-    class_throughput = data_size / total_time
-    netwrok_throughput = network_speed 
-    throughput = min(class_throughput, netwrok_throughput)
+    if classification_time != 0:
+        total_time = classification_time + compression_time
+        class_throughput = data_size /classification_time 
+        compress_thorughput = data_size/compression_time
+        netwrok_throughput = network_speed 
+        throughput = min(class_throughput, netwrok_throughput,compress_thorughput)
+    else:
+        compress_thorughput = data_size/compression_time
+        netwrok_throughput = network_speed 
+        print(network_speed)
+        print(compress_thorughput)
+        throughput = min(compress_thorughput, netwrok_throughput)
     return throughput
 def compress(data, compression_algorithm):
     # Drop the label column and other pre-processing
