@@ -178,8 +178,10 @@ def classify_module_base(input_queue, output_queue): #一直监听
         if chunk is None:#受到结束信号
             output_queue.put((None,0))
             break
-        labeled_data = classify_chunk_base(chunk,i)#传入一个chunk以及0-9  给我一个labeled chunk label = current i
-        print(f"current label:{i}")
+        rid = random.randint(0,9)
+        labeled_data = classify_chunk_base(chunk,rid)#传入一个chunk以及0-9  给我一个labeled chunk label = current i
+        #print(f"current label:{i}")
+        #print(labeled_data.head())
         output_queue.put(labeled_data)
         i += 1
     print("classify module is done")
