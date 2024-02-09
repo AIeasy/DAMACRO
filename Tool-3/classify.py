@@ -1,4 +1,4 @@
-
+import random
 import warnings
 def preprocess_data(df):
     numeric_columns = df.select_dtypes(include='number')
@@ -16,6 +16,6 @@ def classify_chunk(chunk,model):
     chunk_with_labels = add_labels_to_chunk(chunk, predictions)
     return chunk_with_labels
 def classify_chunk_base(chunk,label):
-    labels = [label]* chunk.shape[0]
+    labels = [random.randint(0, 9) for _ in range(chunk.shape[0])]
     chunk_with_labels = add_labels_to_chunk(chunk,labels)
     return chunk_with_labels
