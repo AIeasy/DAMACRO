@@ -81,7 +81,7 @@ def compress(data, compression_algorithm):
 
     return compressed_columns, compress_time
 def transfer_process(worker_id, transfer_input_queue,output_queue,compression_algorithm,s_path, remote_username, remote_host, remote_file_path,network_speed):
-    network_speed = network_speed*1024*8
+    network_speed = math.ceil(network_speed/10*1024*8)
     print(f'transfer_{worker_id}_start\n')
     save_folder = os.path.join(s_path, compression_algorithm)#create folder
     if not os.path.exists(save_folder):
@@ -105,7 +105,7 @@ def transfer_process(worker_id, transfer_input_queue,output_queue,compression_al
                     file_path = os.path.join(save_folder, filename)
                     if (f'worker_{worker_id}' in filename):
                         #transfer_file_via_ssh(local_file_path=output_path, remote_username=remote_username, remote_host=remote_host, remote_file_path=remote_file_path)#transfer it
-                        
+
                         cmd = ["scp", '-l',f'{network_speed}',file_path, f"{remote_username}@{remote_host}:{remote_file_path}"]
                         subprocess.run(cmd)
                         
