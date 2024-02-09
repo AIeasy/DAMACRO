@@ -155,6 +155,22 @@ def transfer_process(worker_id, transfer_input_queue,output_queue,compression_al
                 print(f'transfer_{worker_id}_stopped_l\n')
                 break
             else:
+                start_transfer_time = time.time()
+                for filename in os.listdir(save_folder):#loop throgh all columns files saved in folder
+                    file_path = os.path.join(save_folder, filename)
+                    #print(filename)
+                    #print(worker_id)
+                    if (f'worker_{worker_id}' in filename):
+                        #transfer_file_via_ssh(local_file_path=output_path, remote_username=remote_username, remote_host=remote_host, remote_file_path=remote_file_path)#transfer it
+                        #print("transfering: ",filename)
+                        '''
+                        debug = os.path.join(save_folder,f'transfering_{filename}.txt')
+                        with open(debug,'ab') as gg:
+                            gg.write('1')
+                        '''
+                        cmd = ["scp", '-l',f'{network_speed}',file_path, f"{remote_username}@{remote_host}:{remote_file_path}"]
+                        subprocess.run(cmd)
+                        print(f'transfer_{worker_id} done sending \n')
                 print(f'transfer_{worker_id}_stopped\n')
                 break
         else:
