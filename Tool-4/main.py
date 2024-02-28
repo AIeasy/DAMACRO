@@ -490,7 +490,8 @@ def expierment_fd(scaler_path,json_path,file_path,file_name,original_data_size,m
     set_network_conditions("ens33", f'{network_speed}mbit', "0ms", "0%")#set the network speed
 
     print("loading data stream")
-    for  i,chunk in enumerate(pd.read_csv(f'{file_path}/{file_name}.csv', chunksize=chunk_size, delimiter=',')):
+    iterator1 = pd.read_csv(f'{file_path}/{file_name}.csv', chunksize=chunk_size, delimiter=',')
+    for i, chunk in enumerate(iterator1):
         classify_queue.put(chunk)
     print("stream loaded")
     classify_queue.put(None)  # End of data stream signal
