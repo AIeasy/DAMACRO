@@ -401,7 +401,8 @@ def base_line(file_path,file_name,original_data_size,chunk_size,algorithm,worker
     print("OUT: Compressed size: ",compressed_size)
     compression_ratio =  original_data_size / compressed_size
     print("OUT: Compression ratio: ", compression_ratio)
-    throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=5,data_size=original_data_size)
+    network_speed_fix = original_data_size/total_transfer_time
+    throughput= calculate_throughput(classification_time=classify_time,compression_time=total_compress_time,compression_ratio=compression_ratio,network_speed=network_speed_fix,data_size=original_data_size)
     print("OUT: Throughput: ",throughput)
     cost = calculate_cost(compression_ratio=compression_ratio,original_size=original_data_size,num_cores=num_cores,compression_time=total_compress_time)
     print("OUT: Cost: ",cost)
