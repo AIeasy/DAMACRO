@@ -1,4 +1,4 @@
-## Self-Expressive Network
+## DAMACRO
 
 This repository presents the DAMACRO framework which utilize pre-trained classifiers to clustering the data into different cluster for compression ratio improvment
 
